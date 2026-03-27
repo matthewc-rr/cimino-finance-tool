@@ -657,7 +657,7 @@
       <button class="btn btn-ghost btn-icon close-modal-btn">&#10005;</button>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="f-id">
+      <input type="hidden" id="f-row">
       <div class="form-group">
         <label for="f-name">Vendor Name *</label>
         <input type="text" id="f-name" placeholder="e.g. Salesforce, GitHub, Notion">
@@ -676,22 +676,21 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Cost *</label>
-          <div class="cost-input-wrap">
-            <input type="number" id="f-cost" placeholder="0.00" min="0" step="0.01">
-            <div class="cost-toggle">
-              <button type="button" id="btn-mo" class="active">Monthly</button>
-              <button type="button" id="btn-yr">Annual</button>
-            </div>
-          </div>
-          <input type="hidden" id="f-cost-type" value="monthly">
+          <label for="f-cost-mo">Monthly Cost</label>
+          <input type="number" id="f-cost-mo" placeholder="0.00" min="0" step="0.01">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
+          <label for="f-cost-yr">Annual Cost</label>
+          <input type="number" id="f-cost-yr" placeholder="0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
           <label for="f-renewal">Contract Renewal Date</label>
           <input type="date" id="f-renewal">
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label for="f-owner">Owner / Internal Contact</label>
           <input type="text" id="f-owner" placeholder="e.g. Jane Smith">
@@ -760,7 +759,7 @@
 // CONSTANTS & STATE
 // ============================================================
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
-const HEADERS     = ['ID','Vendor Name','Category','Cost','Cost Type','Renewal Date','Owner','Notes'];
+const HEADERS     = ['Vendor','Category','Monthly Cost','Annual Cost','Renewal Date','Owner','Notes'];
 
 const S = {
   clientId:    localStorage.getItem('vmClientId') || '365545086298-qd4e9drg4dqhvunhphg6gq92fkns8421.apps.googleusercontent.com',
@@ -884,9 +883,9 @@ async function apiFetch(path, method = 'GET', body = null) {
 // SHEETS CRUD
 // ============================================================
 async function ensureHeaders() {
-  const d = await apiFetch('/values/Sheet1!A1:H1');
+  const d = await apiFetch('/values/Sheet1!A1:G1');
   if (!d.values?.[0]?.[0]) {
-    await apiFetch('/values/Sheet1!A1:H1?valueInputOption=RAW', 'PUT', { values: [HEADERS] });
+    await apiFetch('/values/Sheet1!A1:G1?valueInputOption=RAW', 'PUT', { values: [HEADERS] });
   }
 }
 
@@ -899,18 +898,17 @@ async function loadVendors() {
   try {
     await ensureHeaders();
     await fetchGid();
-    const d = await apiFetch('/values/Sheet1!A:H');
+    const d = await apiFetch('/values/Sheet1!A:G');
     const rows = d.values || [];
     S.vendors = rows.slice(1).map((r, i) => ({
-      id:       r[0] || uid(),
-      name:     r[1] || '',
-      category: r[2] || '',
-      cost:     parseFloat(r[3]) || 0,
-      costType: r[4] || 'monthly',
-      renewal:  r[5] || '',
-      owner:    r[6] || '',
-      notes:    r[7] || '',
-      _row:     i + 2,  // 1-based sheet row
+      _row:     i + 2,  // 1-based sheet row, used as identifier
+      name:     r[0] || '',
+      category: r[1] || '',
+      costMo:   parseFloat(r[2]) || 0,
+      costYr:   parseFloat(r[3]) || 0,
+      renewal:  r[4] || '',
+      owner:    r[5] || '',
+      notes:    r[6] || '',
     }));
     renderAll();
   } catch(e) {
@@ -929,39 +927,37 @@ async function addVendor(v) {
 }
 
 async function updateVendor(v) {
-  const ex = S.vendors.find(x => x.id === v.id);
+  const ex = S.vendors.find(x => x._row === v._row);
   if (!ex) throw new Error('Vendor not found');
   await apiFetch(
-    `/values/Sheet1!A${ex._row}:H${ex._row}?valueInputOption=USER_ENTERED`,
+    `/values/Sheet1!A${ex._row}:G${ex._row}?valueInputOption=USER_ENTERED`,
     'PUT',
     { values: [toRow(v)] }
   );
   await loadVendors();
 }
 
-async function deleteVendor(id) {
-  const ex = S.vendors.find(x => x.id === id);
-  if (!ex) throw new Error('Vendor not found');
+async function deleteVendor(row) {
   await apiFetch(':batchUpdate', 'POST', {
     requests: [{
       deleteDimension: {
-        range: { sheetId: S.sheetGid, dimension: 'ROWS', startIndex: ex._row - 1, endIndex: ex._row }
+        range: { sheetId: S.sheetGid, dimension: 'ROWS', startIndex: row - 1, endIndex: row }
       }
     }]
   });
   await loadVendors();
 }
 
-const toRow = v => [v.id, v.name, v.category, v.cost, v.costType, v.renewal, v.owner, v.notes];
+const toRow = v => [v.name, v.category, v.costMo, v.costYr, v.renewal, v.owner, v.notes];
 
 // ============================================================
 // RENDER
 // ============================================================
 function renderDashboard() {
-  let mo = 0;
-  S.vendors.forEach(v => { mo += v.costType === 'monthly' ? v.cost : v.cost / 12; });
-  document.getElementById('stat-monthly').textContent = fmt$(mo);
-  document.getElementById('stat-annual').textContent  = fmt$(mo * 12);
+  let totalMo = 0, totalYr = 0;
+  S.vendors.forEach(v => { totalMo += v.costMo; totalYr += v.costYr; });
+  document.getElementById('stat-monthly').textContent = fmt$(totalMo);
+  document.getElementById('stat-annual').textContent  = fmt$(totalYr);
   document.getElementById('stat-count').textContent   = S.vendors.length;
 }
 
@@ -1000,7 +996,7 @@ function sorted(data) {
   return [...data].sort((a,b) => {
     let va, vb;
     if      (S.sortCol === 'name')    { va = a.name.toLowerCase(); vb = b.name.toLowerCase(); }
-    else if (S.sortCol === 'cost')    { va = a.costType==='monthly'?a.cost:a.cost/12; vb = b.costType==='monthly'?b.cost:b.cost/12; }
+    else if (S.sortCol === 'cost')    { va = a.costMo; vb = b.costMo; }
     else if (S.sortCol === 'renewal') { va = a.renewal||'9999-99'; vb = b.renewal||'9999-99'; }
     else { return 0; }
     if (va < vb) return S.sortDir==='asc' ? -1 : 1;
@@ -1041,18 +1037,18 @@ function renderTable() {
                  : d !== null && d >= 0 && d <= 30 ? 'row-yellow' : '';
     const renewBadge = d !== null && d >= 0 && d <= 30
       ? `<span class="badge badge-${d<=7?'red':'warn'}" style="margin-left:6px;">${d===0?'Today':d===1?'1d':d+'d'}</span>` : '';
-    const typeBadge = `<span class="badge ${v.costType==='monthly'?'badge-mo':'badge-yr'}" style="margin-left:5px;">${v.costType==='monthly'?'MO':'YR'}</span>`;
+    const costDisplay = v.costMo ? fmt$(v.costMo) + '<span class="badge badge-mo" style="margin-left:5px;">MO</span>' : '‚Äî';
 
     return `<tr class="${rowCls}">
       <td><span class="vendor-name">${esc(v.name)}</span></td>
       <td><span class="badge badge-cat">${esc(v.category)}</span></td>
-      <td class="cost-cell">${fmt$(v.cost)}${typeBadge}</td>
+      <td class="cost-cell">${costDisplay}</td>
       <td class="renewal-cell">${fmtDate(v.renewal)}${renewBadge}</td>
       <td>${esc(v.owner)}</td>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v.notes)}">${esc(v.notes)}</td>
       <td><div class="actions-cell" style="justify-content:center;">
-        <button class="btn btn-ghost btn-icon" data-edit="${esc(v.id)}" title="Edit">&#9998;</button>
-        <button class="btn btn-ghost btn-icon" data-del="${esc(v.id)}" title="Delete" style="color:var(--danger)">&#128465;</button>
+        <button class="btn btn-ghost btn-icon" data-edit="${v._row}" title="Edit">&#9998;</button>
+        <button class="btn btn-ghost btn-icon" data-del="${v._row}" title="Delete" style="color:var(--danger)">&#128465;</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -1077,35 +1073,30 @@ const openOverlay  = id => document.getElementById(id).classList.add('open');
 const closeOverlay = id => document.getElementById(id).classList.remove('open');
 
 function resetForm() {
-  ['f-id','f-name','f-cost','f-renewal','f-owner','f-notes'].forEach(id => {
+  ['f-row','f-name','f-cost-mo','f-cost-yr','f-renewal','f-owner','f-notes'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('f-cat').value = '';
-  document.getElementById('f-cost-type').value = 'monthly';
-  document.getElementById('btn-mo').classList.add('active');
-  document.getElementById('btn-yr').classList.remove('active');
 }
 
 function fillForm(v) {
-  document.getElementById('f-id').value      = v.id;
+  document.getElementById('f-row').value     = v._row;
   document.getElementById('f-name').value    = v.name;
   document.getElementById('f-cat').value     = v.category;
-  document.getElementById('f-cost').value    = v.cost;
-  document.getElementById('f-cost-type').value = v.costType;
+  document.getElementById('f-cost-mo').value = v.costMo || '';
+  document.getElementById('f-cost-yr').value = v.costYr || '';
   document.getElementById('f-renewal').value = v.renewal;
   document.getElementById('f-owner').value   = v.owner;
   document.getElementById('f-notes').value   = v.notes;
-  document.getElementById('btn-mo').classList.toggle('active', v.costType === 'monthly');
-  document.getElementById('btn-yr').classList.toggle('active', v.costType === 'annual');
 }
 
 function formValue() {
   return {
-    id:       document.getElementById('f-id').value || uid(),
+    _row:     parseInt(document.getElementById('f-row').value) || null,
     name:     document.getElementById('f-name').value.trim(),
     category: document.getElementById('f-cat').value,
-    cost:     parseFloat(document.getElementById('f-cost').value) || 0,
-    costType: document.getElementById('f-cost-type').value,
+    costMo:   parseFloat(document.getElementById('f-cost-mo').value) || 0,
+    costYr:   parseFloat(document.getElementById('f-cost-yr').value) || 0,
     renewal:  document.getElementById('f-renewal').value,
     owner:    document.getElementById('f-owner').value.trim(),
     notes:    document.getElementById('f-notes').value.trim(),
@@ -1185,18 +1176,6 @@ document.addEventListener('DOMContentLoaded', () => {
     b.addEventListener('click', () => closeOverlay('vendor-overlay'))
   );
 
-  // ---- Cost type toggle ----
-  document.getElementById('btn-mo').addEventListener('click', () => {
-    document.getElementById('f-cost-type').value = 'monthly';
-    document.getElementById('btn-mo').classList.add('active');
-    document.getElementById('btn-yr').classList.remove('active');
-  });
-  document.getElementById('btn-yr').addEventListener('click', () => {
-    document.getElementById('f-cost-type').value = 'annual';
-    document.getElementById('btn-yr').classList.add('active');
-    document.getElementById('btn-mo').classList.remove('active');
-  });
-
   // ---- Save vendor ----
   document.getElementById('save-btn').addEventListener('click', async () => {
     const v = formValue();
@@ -1205,7 +1184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('save-btn');
     btnLoad(btn, true);
     try {
-      const isEdit = !!document.getElementById('f-id').value;
+      const isEdit = !!document.getElementById('f-row').value;
       if (isEdit) { await updateVendor(v); toast('Vendor updated.'); }
       else        { await addVendor(v);    toast('Vendor added.'); }
       closeOverlay('vendor-overlay');
@@ -1218,18 +1197,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---- Table actions (delegated) ----
   document.getElementById('tbody').addEventListener('click', e => {
-    const editId = e.target.closest('[data-edit]')?.dataset.edit;
-    const delId  = e.target.closest('[data-del]')?.dataset.del;
-    if (editId) {
-      const v = S.vendors.find(x => x.id === editId);
+    const editRow = e.target.closest('[data-edit]')?.dataset.edit;
+    const delRow  = e.target.closest('[data-del]')?.dataset.del;
+    if (editRow) {
+      const v = S.vendors.find(x => x._row === parseInt(editRow));
       if (!v) return;
       fillForm(v);
       document.getElementById('modal-title').textContent = 'Edit Vendor';
       openOverlay('vendor-overlay');
     }
-    if (delId) {
-      S.pendingDel = delId;
-      const v = S.vendors.find(x => x.id === delId);
+    if (delRow) {
+      S.pendingDel = parseInt(delRow);
+      const v = S.vendors.find(x => x._row === parseInt(delRow));
       document.getElementById('del-name').textContent = v?.name || 'this vendor';
       openOverlay('del-overlay');
     }

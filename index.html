@@ -632,6 +632,7 @@
               <th class="sortable" data-col="name">Vendor</th>
               <th>Category</th>
               <th class="sortable" data-col="cost">Monthly Cost</th>
+              <th>Annual Cost</th>
               <th class="sortable" data-col="renewal">Renewal Date</th>
               <th>Owner</th>
               <th>Notes</th>
@@ -639,7 +640,7 @@
             </tr>
           </thead>
           <tbody id="tbody">
-            <tr><td colspan="7"><div class="state-placeholder"><p>Loading...</p></div></td></tr>
+            <tr><td colspan="8"><div class="state-placeholder"><p>Loading...</p></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -1023,7 +1024,7 @@ function renderTable() {
 
   if (!data.length) {
     const msg = S.search || S.category ? 'No vendors match your filters.' : 'No vendors yet. Click "Add Vendor" to get started.';
-    tb.innerHTML = `<tr><td colspan="7"><div class="state-placeholder">
+    tb.innerHTML = `<tr><td colspan="8"><div class="state-placeholder">
       <div class="icon">${S.search||S.category?'üîç':'üì≠'}</div>
       <h3>${S.search||S.category?'No results':'No vendors'}</h3>
       <p>${msg}</p>
@@ -1043,6 +1044,7 @@ function renderTable() {
       <td><span class="vendor-name">${esc(v.name)}</span></td>
       <td><span class="badge badge-cat">${esc(v.category)}</span></td>
       <td class="cost-cell">${costDisplay}</td>
+      <td class="cost-cell">${fmt$(v.costYr)}</td>
       <td class="renewal-cell">${fmtDate(v.renewal)}${renewBadge}</td>
       <td>${esc(v.owner)}</td>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v.notes)}">${esc(v.notes)}</td>

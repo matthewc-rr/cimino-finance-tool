@@ -1037,7 +1037,7 @@ function renderTable() {
                  : d !== null && d >= 0 && d <= 30 ? 'row-yellow' : '';
     const renewBadge = d !== null && d >= 0 && d <= 30
       ? `<span class="badge badge-${d<=7?'red':'warn'}" style="margin-left:6px;">${d===0?'Today':d===1?'1d':d+'d'}</span>` : '';
-    const costDisplay = v.costMo ? fmt$(v.costMo) + '<span class="badge badge-mo" style="margin-left:5px;">MO</span>' : '‚Äî';
+    const costDisplay = fmt$(v.costMo) + '<span class="badge badge-mo" style="margin-left:5px;">MO</span>';
 
     return `<tr class="${rowCls}">
       <td><span class="vendor-name">${esc(v.name)}</span></td>

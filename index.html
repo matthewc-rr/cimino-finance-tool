@@ -900,7 +900,7 @@ async function loadVendors() {
   try {
     await ensureHeaders();
     await fetchGid();
-    const d = await apiFetch('/values/Sheet1!A:G');
+    const d = await apiFetch('/values/Sheet1!A:G?valueRenderOption=UNFORMATTED_VALUE');
     const rows = d.values || [];
     S.vendors = rows.slice(1)
       .map((r, i) => ({

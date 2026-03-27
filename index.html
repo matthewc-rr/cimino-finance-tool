@@ -538,7 +538,7 @@
 <div id="setup-screen" class="hidden">
   <div class="setup-header">
     <h2>&#128640; Connect Your Google Sheet</h2>
-    <p>One-time setup ‚Äî credentials are saved locally in your browser.</p>
+    <p>One-time setup — credentials are saved locally in your browser.</p>
   </div>
   <div class="setup-body">
     <div class="notice">
@@ -553,11 +553,11 @@
       <h3>Setup Instructions</h3>
       <ol>
         <li>Go to <a href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a> and create or select a project.</li>
-        <li>Navigate to <strong>APIs &amp; Services ‚Üí Library</strong> and enable the <strong>Google Sheets API</strong>.</li>
-        <li>Go to <strong>APIs &amp; Services ‚Üí Credentials</strong> ‚Üí <strong>Create Credentials ‚Üí OAuth 2.0 Client ID</strong>.</li>
+        <li>Navigate to <strong>APIs &amp; Services → Library</strong> and enable the <strong>Google Sheets API</strong>.</li>
+        <li>Go to <strong>APIs &amp; Services → Credentials</strong> → <strong>Create Credentials → OAuth 2.0 Client ID</strong>.</li>
         <li>Choose application type: <strong>Web application</strong>.</li>
         <li>Under <strong>Authorized JavaScript origins</strong>, add <code>http://localhost:8080</code> (plus your production domain if hosting this elsewhere). Click <strong>Create</strong>.</li>
-        <li>Copy your <strong>Client ID</strong> ‚Äî it looks like <code>123456789-abc.apps.googleusercontent.com</code>.</li>
+        <li>Copy your <strong>Client ID</strong> — it looks like <code>123456789-abc.apps.googleusercontent.com</code>.</li>
         <li>Create a blank <a href="https://sheets.google.com" target="_blank">Google Sheet</a>. Copy its ID from the URL:<br>
           <code>https://docs.google.com/spreadsheets/d/<strong>[SHEET_ID]</strong>/edit</code></li>
         <li>Enter both values below and click <strong>Save &amp; Connect</strong>.</li>
@@ -783,25 +783,29 @@ const uid = () => 'v' + Math.random().toString(36).slice(2,9) + Date.now().toStr
 const fmt$ = n => '$' + Number(n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 
 function fmtDate(d) {
-  if (!d) return '‚Äî';
-  const p = d.split('-');
-  return p.length === 3 ? `${p[1]}/${p[2]}/${p[0]}` : d;
+  if (!d) return '—';
+  const s = String(d);
+  const p = s.split('-');
+  if (p.length === 3) return `${p[1]}/${p[2]}/${p[0]}`; // YYYY-MM-DD → M/D/YYYY
+  return s; // already formatted (e.g. "3/1/2026" from Sheet)
 }
 
 function daysUntil(ds) {
   if (!ds) return null;
+  const s = String(ds);
   const t = new Date(); t.setHours(0,0,0,0);
-  const d = new Date(ds + 'T00:00:00');
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
+  if (isNaN(d.getTime())) return null;
   return Math.ceil((d - t) / 86400000);
 }
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-// Safely parse a number from a sheet cell ‚Äî strips commas, currency symbols, spaces
+// Safely parse a number from a sheet cell — strips commas, currency symbols, spaces
 const parseNum = s => { const n = parseFloat(String(s||'').replace(/[^0-9.-]/g, '')); return isNaN(n) ? 0 : n; };
 
 function toast(msg, type='success') {
-  const icons = { success:'‚úì', error:'‚úó', info:'‚Ñπ' };
+  const icons = { success:'✓', error:'✗', info:'ℹ' };
   const el = document.createElement('div');
   el.className = `toast t-${type}`;
   el.innerHTML = `<span>${icons[type]||''}</span>${esc(msg)}`;
@@ -861,7 +865,7 @@ function signOut() {
 }
 
 // ============================================================
-// SHEETS API ‚Äî CORE FETCH WRAPPERS
+// SHEETS API — CORE FETCH WRAPPERS
 // ============================================================
 async function apiFetch(path, method = 'GET', body = null) {
   const url = `${SHEETS_BASE}/${S.sheetId}${path}`;
@@ -874,7 +878,7 @@ async function apiFetch(path, method = 'GET', body = null) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   };
   const res = await fetch(url, opts);
-  if (res.status === 401) { signIn(''); throw new Error('Token expired ‚Äî re-authorizing'); }
+  if (res.status === 401) { signIn(''); throw new Error('Token expired — re-authorizing'); }
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     throw new Error(e.error?.message || `HTTP ${res.status}`);
@@ -901,7 +905,7 @@ async function loadVendors() {
   try {
     await ensureHeaders();
     await fetchGid();
-    const d = await apiFetch('/values/Sheet1!A:G?valueRenderOption=UNFORMATTED_VALUE');
+    const d = await apiFetch('/values/Sheet1!A:G?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING');
     const rows = d.values || [];
     S.vendors = rows.slice(1)
       .map((r, i) => ({
@@ -977,7 +981,7 @@ function renderAlerts() {
     const cls = d <= 7 ? 'urgent' : 'warning';
     const lbl = d === 0 ? 'Today!' : d === 1 ? 'Tomorrow' : `in ${d} days`;
     return `<div class="alert-item ${cls}">
-      <span>${cls==='urgent'?'üî¥':'üü°'}</span>
+      <span>${cls==='urgent'?'🔴':'🟡'}</span>
       <span><strong>${esc(v.name)}</strong> renews ${lbl} &mdash; ${fmtDate(v.renewal)}</span>
     </div>`;
   }).join('');
@@ -1025,7 +1029,7 @@ function renderTable() {
   if (!data.length) {
     const msg = S.search || S.category ? 'No vendors match your filters.' : 'No vendors yet. Click "Add Vendor" to get started.';
     tb.innerHTML = `<tr><td colspan="8"><div class="state-placeholder">
-      <div class="icon">${S.search||S.category?'üîç':'üì≠'}</div>
+      <div class="icon">${S.search||S.category?'🔍':'📭'}</div>
       <h3>${S.search||S.category?'No results':'No vendors'}</h3>
       <p>${msg}</p>
     </div></td></tr>`;
@@ -1154,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('vmSheetId', sid);
     closeOverlay('settings-overlay');
     S.tokenClient = null;
-    toast('Settings saved ‚Äî reconnecting...', 'info');
+    toast('Settings saved — reconnecting...', 'info');
     signIn('consent');
   });
 

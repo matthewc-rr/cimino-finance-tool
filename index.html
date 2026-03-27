@@ -360,9 +360,8 @@
 
     th.sortable { cursor: pointer; user-select: none; }
     th.sortable:hover { color: var(--primary); }
-    th .sort-icon { display: inline-block; margin-left: 4px; opacity: 0.35; font-size: 11px; }
-    th.sort-asc .sort-icon,
-    th.sort-desc .sort-icon { opacity: 1; color: var(--primary); }
+    th.sort-asc  { color: var(--primary); }
+    th.sort-desc { color: var(--primary); }
 
     td {
       padding: 12px 16px;
@@ -630,10 +629,10 @@
         <table>
           <thead>
             <tr>
-              <th class="sortable" data-col="name">Vendor <span class="sort-icon">^v</span></th>
+              <th class="sortable" data-col="name">Vendor</th>
               <th>Category</th>
-              <th class="sortable" data-col="cost">Cost <span class="sort-icon">^v</span></th>
-              <th class="sortable" data-col="renewal">Renewal Date <span class="sort-icon">^v</span></th>
+              <th class="sortable" data-col="cost">Monthly Cost</th>
+              <th class="sortable" data-col="renewal">Renewal Date</th>
               <th>Owner</th>
               <th>Notes</th>
               <th style="width:88px;text-align:center;">Actions</th>
@@ -797,6 +796,9 @@ function daysUntil(ds) {
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+// Safely parse a number from a sheet cell ‚Äî strips commas, currency symbols, spaces
+const parseNum = s => { const n = parseFloat(String(s||'').replace(/[^0-9.-]/g, '')); return isNaN(n) ? 0 : n; };
+
 function toast(msg, type='success') {
   const icons = { success:'‚úì', error:'‚úó', info:'‚Ñπ' };
   const el = document.createElement('div');
@@ -900,16 +902,18 @@ async function loadVendors() {
     await fetchGid();
     const d = await apiFetch('/values/Sheet1!A:G');
     const rows = d.values || [];
-    S.vendors = rows.slice(1).map((r, i) => ({
-      _row:     i + 2,  // 1-based sheet row, used as identifier
-      name:     r[0] || '',
-      category: r[1] || '',
-      costMo:   parseFloat(r[2]) || 0,
-      costYr:   parseFloat(r[3]) || 0,
-      renewal:  r[4] || '',
-      owner:    r[5] || '',
-      notes:    r[6] || '',
-    }));
+    S.vendors = rows.slice(1)
+      .map((r, i) => ({
+        _row:     i + 2,        // 1-based sheet row, used as edit/delete identifier
+        name:     r[0] || '',   // col A (index 0): Vendor name
+        category: r[1] || '',   // col B (index 1): Category
+        costMo:   parseNum(r[2]),  // col C (index 2): Monthly Cost
+        costYr:   parseNum(r[3]),  // col D (index 3): Annual Cost
+        renewal:  r[4] || '',   // col E (index 4): Renewal Date
+        owner:    r[5] || '',   // col F (index 5): Owner
+        notes:    r[6] || '',   // col G (index 6): Notes
+      }))
+      .filter(v => v.name.trim() !== ''); // skip empty rows
     renderAll();
   } catch(e) {
     toast('Error loading data: ' + e.message, 'error');
@@ -1006,15 +1010,11 @@ function sorted(data) {
 }
 
 function renderTable() {
-  // Update sort icons
+  // Highlight active sort column header
   document.querySelectorAll('th.sortable').forEach(th => {
     th.classList.remove('sort-asc','sort-desc');
-    const icon = th.querySelector('.sort-icon');
     if (th.dataset.col === S.sortCol) {
       th.classList.add(S.sortDir==='asc' ? 'sort-asc' : 'sort-desc');
-      if (icon) icon.textContent = S.sortDir==='asc' ? '^' : 'v';
-    } else {
-      if (icon) icon.textContent = '^v';
     }
   });
 
